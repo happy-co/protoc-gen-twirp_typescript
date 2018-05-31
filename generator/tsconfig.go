@@ -2,11 +2,12 @@ package generator
 
 import (
 	"fmt"
+	"path"
 
 	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
-func CreateTSConfig() *plugin.CodeGeneratorResponse_File {
+func CreateTSConfig(outputPath string) *plugin.CodeGeneratorResponse_File {
 	content := fmt.Sprintf(`{
   "compilerOptions": {
     "target": "es5",
@@ -22,7 +23,7 @@ func CreateTSConfig() *plugin.CodeGeneratorResponse_File {
 }
 `)
 
-	fileName := "tsconfig.json"
+	fileName := path.Join(outputPath, "tsconfig.json")
 	cf := &plugin.CodeGeneratorResponse_File{}
 	cf.Name = &fileName
 	cf.Content = &content

@@ -15,7 +15,7 @@ export * from './{{.}}';
 {{end}}
 `
 
-func CreatePackageIndex(files []*plugin.CodeGeneratorResponse_File) (*plugin.CodeGeneratorResponse_File, error) {
+func CreatePackageIndex(outputPath string, files []*plugin.CodeGeneratorResponse_File) (*plugin.CodeGeneratorResponse_File, error) {
 	var names []string
 
 	for _, f := range files {
@@ -23,7 +23,8 @@ func CreatePackageIndex(files []*plugin.CodeGeneratorResponse_File) (*plugin.Cod
 
 		// myModule.ts => myModule
 		if path.Ext(filename) == ".ts" {
-			moduleName := filename[:len(filename)-len(path.Ext(filename))]
+			base := path.Base(filename)
+			moduleName := base[:len(base)-len(path.Ext(base))]
 			names = append(names, moduleName)
 		}
 	}
@@ -37,7 +38,7 @@ func CreatePackageIndex(files []*plugin.CodeGeneratorResponse_File) (*plugin.Cod
 	t.Execute(b, names)
 
 	cf := &plugin.CodeGeneratorResponse_File{}
-	cf.Name = proto.String("index.ts")
+	cf.Name = proto.String(path.Join(outputPath, "index.ts"))
 	cf.Content = proto.String(b.String())
 
 	return cf, nil

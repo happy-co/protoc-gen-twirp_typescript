@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -36,6 +37,7 @@ func readRequest(r io.Reader) *plugin.CodeGeneratorRequest {
 
 func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
 	resp := &plugin.CodeGeneratorResponse{}
+	var outputPath string
 
 	for _, f := range in.GetProtoFile() {
 		// skip google/protobuf/timestamp, we don't do any special serialization for jsonpb.
@@ -43,7 +45,8 @@ func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
 			continue
 		}
 
-		cf, err := generator.CreateClientAPI(f)
+		outputPath = path.Dir(*f.Name)
+		cf, err := generator.CreateClientAPI(outputPath, f)
 		if err != nil {
 			resp.Error = proto.String(err.Error())
 			return resp
@@ -52,20 +55,20 @@ func generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResponse {
 		resp.File = append(resp.File, cf)
 	}
 
-	resp.File = append(resp.File, generator.RuntimeLibrary())
+	resp.File = append(resp.File, generator.RuntimeLibrary(outputPath))
 
 	params := getParameters(in)
 
 	if pkgName, ok := params["package_name"]; ok {
-		idx, err := generator.CreatePackageIndex(resp.File)
+		idx, err := generator.CreatePackageIndex(outputPath, resp.File)
 		if err != nil {
 			resp.Error = proto.String(err.Error())
 			return resp
 		}
 
 		resp.File = append(resp.File, idx)
-		resp.File = append(resp.File, generator.CreateTSConfig())
-		resp.File = append(resp.File, generator.CreatePackageJSON(pkgName))
+		resp.File = append(resp.File, generator.CreateTSConfig(outputPath))
+		resp.File = append(resp.File, generator.CreatePackageJSON(outputPath, pkgName))
 	}
 
 	return resp

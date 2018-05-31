@@ -2,11 +2,12 @@ package generator
 
 import (
 	"fmt"
+	"path"
 
 	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
-func CreatePackageJSON(projectName string) *plugin.CodeGeneratorResponse_File {
+func CreatePackageJSON(outputPath, projectName string) *plugin.CodeGeneratorResponse_File {
 	content := fmt.Sprintf(`{
   "name": "%s",
   "version": "1.0.0",
@@ -28,7 +29,7 @@ func CreatePackageJSON(projectName string) *plugin.CodeGeneratorResponse_File {
 }
 `, projectName)
 
-	fileName := "package.json"
+	fileName := path.Join(outputPath, "package.json")
 	cf := &plugin.CodeGeneratorResponse_File{}
 	cf.Name = &fileName
 	cf.Content = &content

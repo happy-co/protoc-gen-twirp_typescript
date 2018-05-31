@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"path"
 	"strings"
 	"text/template"
 
@@ -195,7 +196,7 @@ func (ctx *APIContext) enableUnmarshal(m *Model) {
 	}
 }
 
-func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorResponse_File, error) {
+func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorResponse_File, error) {
 	ctx := NewAPIContext()
 	pkg := d.GetPackage()
 
@@ -279,7 +280,7 @@ func CreateClientAPI(d *descriptor.FileDescriptorProto) (*plugin.CodeGeneratorRe
 	}
 
 	cf := &plugin.CodeGeneratorResponse_File{}
-	cf.Name = proto.String(tsModuleFilename(d))
+	cf.Name = proto.String(path.Join(outputPath, tsModuleFilename(d)))
 	cf.Content = proto.String(b.String())
 
 	return cf, nil

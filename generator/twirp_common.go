@@ -1,11 +1,13 @@
 package generator
 
 import (
+	"path"
+
 	"github.com/golang/protobuf/proto"
 	plugin "github.com/golang/protobuf/protoc-gen-go/plugin"
 )
 
-func RuntimeLibrary() *plugin.CodeGeneratorResponse_File {
+func RuntimeLibrary(outputPath string) *plugin.CodeGeneratorResponse_File {
 	tmpl := `
 export interface TwirpErrorJSON {
     code: string;
@@ -42,7 +44,7 @@ export const createTwirpRequest = (url: string, body: object): Request => {
 export type Fetch = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 `
 	cf := &plugin.CodeGeneratorResponse_File{}
-	cf.Name = proto.String("twirp.ts")
+	cf.Name = proto.String(path.Join(outputPath, "twirp.ts"))
 	cf.Content = proto.String(tmpl)
 
 	return cf
