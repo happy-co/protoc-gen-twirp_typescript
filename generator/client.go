@@ -31,7 +31,7 @@ interface {{.Name}}JSON {
 }
 
 {{if .CanMarshal}}
-const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
+const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}): {{.Name}}JSON => {
     return {
         {{range .Fields -}}
         {{.JSONName}}: {{stringify .}},
@@ -41,7 +41,7 @@ const {{.Name}}ToJSON = (m: {{.Name}}): {{.Name}}JSON => {
 {{end -}}
 
 {{if .CanUnmarshal}}
-const JSONTo{{.Name}} = (m: {{.Name}}JSON): {{.Name}} => {
+const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}JSON): {{.Name}} => {
     return {
         {{range .Fields -}}
         {{.Name}}: {{parse .}},
@@ -172,9 +172,15 @@ func (ctx *APIContext) enableMarshal(m *Model) {
 		if !f.IsMessage || f.Type == "Date" {
 			continue
 		}
-		mm, ok := ctx.modelLookup[f.Type]
+
+		baseType := f.Type
+		if f.IsRepeated {
+			baseType = strings.Trim(baseType, "[]")
+		}
+
+		mm, ok := ctx.modelLookup[baseType]
 		if !ok {
-			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
+			log.Fatalf("could not find model of type %s for field %s", baseType, f.Name)
 		}
 		ctx.enableMarshal(mm)
 	}
@@ -188,9 +194,15 @@ func (ctx *APIContext) enableUnmarshal(m *Model) {
 		if !f.IsMessage || f.Type == "Date" {
 			continue
 		}
-		mm, ok := ctx.modelLookup[f.Type]
+
+		baseType := f.Type
+		if f.IsRepeated {
+			baseType = strings.Trim(baseType, "[]")
+		}
+
+		mm, ok := ctx.modelLookup[baseType]
 		if !ok {
-			log.Fatalf("could not find model of type %s for field %s", f.Type, f.Name)
+			log.Fatalf("could not find model of type %s for field %s", baseType, f.Name)
 		}
 		ctx.enableUnmarshal(mm)
 	}
