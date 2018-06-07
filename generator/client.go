@@ -59,7 +59,7 @@ export interface {{.Name}} {
     {{end}}
 }
 
-export class Default{{.Name}} implements {{.Name}} {
+export class {{.Name}}Client implements {{.Name}} {
     private hostname: string;
     private fetch: Fetch;
     private pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
