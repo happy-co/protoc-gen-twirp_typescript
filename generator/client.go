@@ -14,6 +14,7 @@ import (
 )
 
 const apiTemplate = `
+import {resolve} from 'url';
 import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
 
 {{range .Models}}
@@ -71,7 +72,7 @@ export class {{.Name}}Client implements {{.Name}} {
 
     {{- range .Methods}}
     {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
-        const url = this.hostname + this.pathPrefix + "{{.Path}}";
+        const url = resolve(this.hostname, this.pathPrefix + "{{.Path}}");
         return this.fetch(createTwirpRequest(url, {{.InputType}}ToJSON({{.InputArg}}))).then((resp) => {
             if (!resp.ok) {
                 return throwTwirpError(resp);
