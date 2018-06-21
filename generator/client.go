@@ -21,13 +21,13 @@ import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
 {{- if not .Primitive}}
 export interface {{.Name}} {
     {{range .Fields -}}
-    {{.Name}}: {{.Type}};
+    {{.Name}}{{if .IsRepeated}}{{else}}?{{end}}: {{.Type}};
     {{end}}
 }
 
 interface {{.Name}}JSON {
     {{range .Fields -}}
-    {{.JSONName}}: {{.JSONType}};
+    {{.JSONName}}{{if .IsRepeated}}{{else}}?{{end}}: {{.JSONType}};
     {{end}}
 }
 
