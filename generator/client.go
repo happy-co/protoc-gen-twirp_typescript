@@ -42,10 +42,10 @@ const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}): {{.Name}}J
 {{end -}}
 
 {{if .CanUnmarshal}}
-const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}JSON): {{.Name}} => {
+const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}JSON): {{.Name}} => {
     return {
         {{range .Fields -}}
-        {{.Name}}: {{parse .}},
+        {{.Name}}: m !== undefined ? {{parse .}} : {{if .IsRepeated}}[]{{else}}undefined{{end}},
         {{end}}
     };
 };
