@@ -215,15 +215,7 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 
 	// Parse all Messages for generating typescript interfaces
 	for _, m := range d.GetMessageType() {
-		model := &Model{
-			Name: m.GetName(),
-		}
-
-		for _, f := range m.GetField() {
-			model.Fields = append(model.Fields, newField(f))
-		}
-
-		ctx.AddModel(model)
+		addMessageType(m, "", &ctx, pkg)
 	}
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
@@ -236,7 +228,7 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 		for _, m := range s.GetMethod() {
 			methodPath := m.GetName()
 			methodName := strings.ToLower(methodPath[0:1]) + methodPath[1:]
-			in := removePkg(m.GetInputType())
+			in := removePkg(m.GetInputType(), pkg)
 			arg := strings.ToLower(in[0:1]) + in[1:]
 
 			method := ServiceMethod{
@@ -244,7 +236,7 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 				Path:       methodPath,
 				InputArg:   arg,
 				InputType:  in,
-				OutputType: removePkg(m.GetOutputType()),
+				OutputType: removePkg(m.GetOutputType(), pkg),
 			}
 
 			service.Methods = append(service.Methods, method)
@@ -299,8 +291,22 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 	return cf, nil
 }
 
-func newField(f *descriptor.FieldDescriptorProto) ModelField {
-	tsType, jsonType := protoToTSType(f)
+func addMessageType(m *descriptor.DescriptorProto, prefix string, ctx *APIContext, pkg string) {
+	model := &Model{
+		Name: prefix + m.GetName(),
+	}
+	for _, f := range m.GetField() {
+		model.Fields = append(model.Fields, newField(f, pkg))
+	}
+	ctx.AddModel(model)
+
+	for _, n := range m.GetNestedType() {
+		addMessageType(n, model.Name, ctx, pkg)
+	}
+}
+
+func newField(f *descriptor.FieldDescriptorProto, pkg string) ModelField {
+	tsType, jsonType := protoToTSType(f, pkg)
 	jsonName := f.GetName()
 	name := camelCase(jsonName)
 
@@ -319,7 +325,7 @@ func newField(f *descriptor.FieldDescriptorProto) ModelField {
 
 // generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
 // will work when converting between TS interfaces and protobuf JSON.
-func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string) {
+func protoToTSType(f *descriptor.FieldDescriptorProto, pkg string) (string, string) {
 	tsType := "string"
 	jsonType := "string"
 
@@ -349,8 +355,8 @@ func protoToTSType(f *descriptor.FieldDescriptorProto) (string, string) {
 			tsType = "Date"
 			jsonType = "string"
 		} else {
-			tsType = removePkg(name)
-			jsonType = removePkg(name) + "JSON"
+			tsType = removePkg(name, pkg)
+			jsonType = removePkg(name, pkg) + "JSON"
 		}
 	}
 
@@ -366,9 +372,8 @@ func isRepeated(field *descriptor.FieldDescriptorProto) bool {
 	return field.Label != nil && *field.Label == descriptor.FieldDescriptorProto_LABEL_REPEATED
 }
 
-func removePkg(s string) string {
-	p := strings.Split(s, ".")
-	return p[len(p)-1]
+func removePkg(s string, pkg string) string {
+	return strings.Replace(strings.TrimPrefix(s, "." + pkg + "."), ".", "", -1)
 }
 
 func camelCase(s string) string {
