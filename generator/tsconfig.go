@@ -10,7 +10,7 @@ import (
 func CreateTSConfig(outputPath string) *plugin.CodeGeneratorResponse_File {
 	content := fmt.Sprintf(`{
   "compilerOptions": {
-    "target": "es5",
+    "target": "es6",
     "module": "commonjs",
     "declaration": true,
     "importHelpers": true,

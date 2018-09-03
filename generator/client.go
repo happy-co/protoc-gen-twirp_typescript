@@ -17,21 +17,38 @@ const apiTemplate = `
 import {resolve} from 'url';
 import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
 
-{{range .Models}}
-{{- if not .Primitive}}
+{{range .Models -}}
+{{if not .Primitive -}}
+{{if not .Map -}}
 export interface {{.Name}} {
     {{range .Fields -}}
-    {{.Name}}{{if .IsRepeated}}{{else}}?{{end}}: {{.Type}};
+    {{.Name}}{{if not .IsRepeated}}?{{end}}: {{if .MapType}}{{.MapType}}{{else}}{{.Type}}{{end}};
     {{end}}
 }
 
+{{end -}}
+{{$map := .Map -}}
 interface {{.Name}}JSON {
     {{range .Fields -}}
-    {{.JSONName}}{{if .IsRepeated}}{{else}}?{{end}}: {{.JSONType}};
+    {{.JSONName}}{{if and (not .IsRepeated) (not $map)}}?{{end}}: {{.JSONType}};
     {{end}}
 }
 
-{{if .CanMarshal}}
+{{if .CanMarshal -}}
+{{if .Map -}}
+const {{.Map.Name}}MapToJSON = (map: Map<{{.Map.KeyField.Type}}, {{.Map.ValueField.Type}}>): {{.Name}}JSON[] => {
+	return Array.from(map.entries()).map(entry => {
+        const [key, value] = entry
+        const m = {key: key, value: value}
+		return {
+			{{range .Fields -}}
+            {{.JSONName}}: {{stringify .}},
+            {{end}}
+        }
+    })
+}
+
+{{else -}}
 const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}): {{.Name}}JSON => {
     return {
         {{range .Fields -}}
@@ -39,23 +56,36 @@ const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}): {{.Name}}J
         {{end}}
     };
 };
+
+{{end -}}
 {{end -}}
 
-{{if .CanUnmarshal}}
+{{if .CanUnmarshal -}}
+{{if .Map -}}
+const JSONTo{{.Map.Name}}Map = (entries: {{.Name}}JSON[]): Map<{{.Map.KeyField.Type}}, {{.Map.ValueField.Type}}> => {
+	return new Map(entries.map(m => {
+		const tuple: [{{.Map.KeyField.Type}}, {{.Map.ValueField.Type}}] = [{{parse .Map.KeyField}}, {{parse .Map.ValueField}}]
+		return tuple
+	}))
+}
+
+{{else -}}
 const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}JSON): {{.Name}} => {
     return {
         {{range .Fields -}}
-        {{.Name}}: m !== undefined ? {{parse .}} : {{if .IsRepeated}}[]{{else}}undefined{{end}},
+        {{.Name}}: m !== undefined ? {{parse .}} : {{if .MapType}}new Map(){{else if .IsRepeated}}[]{{else}}undefined{{end}},
         {{end}}
     };
 };
-{{end -}}
-{{end -}}
-{{end}}
 
-{{range .Services}}
+{{end -}}
+{{end -}}
+{{end -}}
+{{end -}}
+
+{{range .Services -}}
 export interface {{.Name}} {
-	{{- range .Methods}}
+	{{range .Methods -}}
     {{.Name}}: ({{.InputArg}}: {{.InputType}}) => Promise<{{.OutputType}}>;
     {{end}}
 }
@@ -70,7 +100,7 @@ export class {{.Name}}Client implements {{.Name}} {
         this.fetch = fetch;
     }
 
-    {{- range .Methods}}
+    {{range .Methods -}}
     {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
         const url = resolve(this.hostname, this.pathPrefix + "{{.Path}}");
         return this.fetch(createTwirpRequest(url, {{.InputType}}ToJSON({{.InputArg}}))).then((resp) => {
@@ -83,13 +113,15 @@ export class {{.Name}}Client implements {{.Name}} {
     }
     {{end}}
 }
-{{end}}
+
+{{end -}}
 `
 
 type Model struct {
 	Name         string
 	Primitive    bool
 	Fields       []ModelField
+	Map          *MapDetails
 	CanMarshal   bool
 	CanUnmarshal bool
 }
@@ -101,6 +133,13 @@ type ModelField struct {
 	JSONType   string
 	IsMessage  bool
 	IsRepeated bool
+	MapType    *string
+}
+
+type MapDetails struct {
+	Name       string
+	KeyField   ModelField
+	ValueField ModelField
 }
 
 type Service struct {
@@ -215,7 +254,7 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 
 	// Parse all Messages for generating typescript interfaces
 	for _, m := range d.GetMessageType() {
-		addMessageType(m, "", &ctx, pkg)
+		addMessageType(m, "", pkg, &ctx)
 	}
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
@@ -291,21 +330,33 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 	return cf, nil
 }
 
-func addMessageType(m *descriptor.DescriptorProto, prefix string, ctx *APIContext, pkg string) {
+func addMessageType(m *descriptor.DescriptorProto, prefix, pkg string, ctx *APIContext) {
 	model := &Model{
-		Name: prefix + m.GetName(),
+		Name: strings.Replace(prefix, ".", "", -1) + m.GetName(),
 	}
+	var keyField, valueField *ModelField
 	for _, f := range m.GetField() {
-		model.Fields = append(model.Fields, newField(f, pkg))
+		field := newField(f, m, pkg)
+		model.Fields = append(model.Fields, field)
+		if f.GetName() == "key" {
+			keyField = &field
+		}
+		if f.GetName() == "value" {
+			valueField = &field
+		}
 	}
 	ctx.AddModel(model)
 
+	if m.Options.GetMapEntry() {
+		model.Map = &MapDetails{Name: strings.TrimSuffix(model.Name, "Entry"), KeyField: *keyField, ValueField: *valueField}
+	}
+
 	for _, n := range m.GetNestedType() {
-		addMessageType(n, model.Name, ctx, pkg)
+		addMessageType(n, prefix+"."+m.GetName(), pkg, ctx)
 	}
 }
 
-func newField(f *descriptor.FieldDescriptorProto, pkg string) ModelField {
+func newField(f *descriptor.FieldDescriptorProto, m *descriptor.DescriptorProto, pkg string) ModelField {
 	tsType, jsonType := protoToTSType(f, pkg)
 	jsonName := f.GetName()
 	name := camelCase(jsonName)
@@ -319,6 +370,7 @@ func newField(f *descriptor.FieldDescriptorProto, pkg string) ModelField {
 
 	field.IsMessage = f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE
 	field.IsRepeated = isRepeated(f)
+	field.MapType = mapType(f, m, pkg)
 
 	return field
 }
@@ -326,8 +378,19 @@ func newField(f *descriptor.FieldDescriptorProto, pkg string) ModelField {
 // generates the (Type, JSONType) tuple for a ModelField so marshal/unmarshal functions
 // will work when converting between TS interfaces and protobuf JSON.
 func protoToTSType(f *descriptor.FieldDescriptorProto, pkg string) (string, string) {
-	tsType := "string"
-	jsonType := "string"
+	tsType, jsonType := types(f, pkg)
+
+	if isRepeated(f) {
+		tsType = tsType + "[]"
+		jsonType = jsonType + "[]"
+	}
+
+	return tsType, jsonType
+}
+
+func types(f *descriptor.FieldDescriptorProto, pkg string) (tsType string, jsonType string) {
+	tsType = "string"
+	jsonType = "string"
 
 	switch f.GetType() {
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE,
@@ -360,20 +423,41 @@ func protoToTSType(f *descriptor.FieldDescriptorProto, pkg string) (string, stri
 		}
 	}
 
-	if isRepeated(f) {
-		tsType = tsType + "[]"
-		jsonType = jsonType + "[]"
-	}
-
-	return tsType, jsonType
+	return
 }
 
-func isRepeated(field *descriptor.FieldDescriptorProto) bool {
-	return field.Label != nil && *field.Label == descriptor.FieldDescriptorProto_LABEL_REPEATED
+func isRepeated(f *descriptor.FieldDescriptorProto) bool {
+	return f.GetLabel() == descriptor.FieldDescriptorProto_LABEL_REPEATED
+}
+
+func mapType(f *descriptor.FieldDescriptorProto, m *descriptor.DescriptorProto, pkg string) *string {
+	typeName := f.GetTypeName()
+	if typeName == "" {
+		return nil
+	}
+
+	splits := strings.Split(typeName, ".")
+	simpleName := splits[len(splits)-1]
+	for _, n := range m.GetNestedType() {
+		if n.GetName() == simpleName && n.GetOptions().GetMapEntry() {
+			var keyType, valType string
+			for _, e := range n.GetField() {
+				if e.GetName() == "key" {
+					keyType, _ = types(e, pkg)
+				}
+				if e.GetName() == "value" {
+					valType, _ = types(e, pkg)
+				}
+			}
+			s := "Map<" + keyType + "," + valType + ">"
+			return &s
+		}
+	}
+	return nil
 }
 
 func removePkg(s string, pkg string) string {
-	return strings.Replace(strings.TrimPrefix(s, "." + pkg + "."), ".", "", -1)
+	return strings.Replace(strings.TrimPrefix(s, "."+pkg+"."), ".", "", -1)
 }
 
 func camelCase(s string) string {
@@ -392,14 +476,12 @@ func camelCase(s string) string {
 
 func stringify(f ModelField) string {
 	if f.IsRepeated {
-		singularType := f.Type[0 : len(f.Type)-2] // strip array brackets from type
-
 		if f.Type == "Date" {
 			return fmt.Sprintf("m.%s.map((n) => n.toISOString())", f.Name)
-		}
-
-		if f.IsMessage {
-			return fmt.Sprintf("m.%s.map(%sToJSON)", f.Name, singularType)
+		} else if f.MapType != nil {
+			return fmt.Sprintf("%sMapToJSON(m.%s)", strings.TrimSuffix(f.Type, "Entry[]"), f.Name)
+		} else if f.IsMessage {
+			return fmt.Sprintf("m.%s.map(%sToJSON)", f.Name, strings.TrimSuffix(f.Type, "[]"))
 		}
 	}
 
@@ -416,14 +498,12 @@ func stringify(f ModelField) string {
 
 func parse(f ModelField) string {
 	if f.IsRepeated {
-		singularType := f.Type[0 : len(f.Type)-2] // strip array brackets from type
-
 		if f.Type == "Date" {
 			return fmt.Sprintf("m.%s.map((n) => new Date(n))", f.JSONName)
-		}
-
-		if f.IsMessage {
-			return fmt.Sprintf("m.%s.map(JSONTo%s)", f.JSONName, singularType)
+		} else if f.MapType != nil {
+			return fmt.Sprintf("JSONTo%sMap(m.%s)", strings.TrimSuffix(f.Type, "Entry[]"), f.JSONName)
+		} else if f.IsMessage {
+			return fmt.Sprintf("m.%s.map(JSONTo%s)", f.JSONName, strings.TrimSuffix(f.Type, "[]"))
 		}
 	}
 
