@@ -49,10 +49,10 @@ const {{.Map.Name}}MapToJSON = (map: Map<{{.Map.KeyField.Type}}, {{.Map.ValueFie
 }
 
 {{else -}}
-const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}: {{.Name}}): {{.Name}}JSON => {
+const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}): {{.Name}}JSON => {
     return {
         {{range .Fields -}}
-        {{.JSONName}}: {{stringify .}},
+        {{.JSONName}}: m !== undefined ? {{stringify .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
         {{end}}
     };
 };
@@ -486,7 +486,7 @@ func stringify(f ModelField) string {
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("m.%s.toISOString()", f.Name)
+		return fmt.Sprintf("m.%[1]s !== undefined ? m.%[1]s.toISOString() : undefined", f.Name)
 	}
 
 	if f.IsMessage {
@@ -508,7 +508,7 @@ func parse(f ModelField) string {
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("new Date(m.%s)", f.JSONName)
+		return fmt.Sprintf("m.%[1]s !== undefined ? new Date(m.%[1]s) : undefined", f.JSONName)
 	}
 
 	if f.IsMessage {
