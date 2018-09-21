@@ -17,35 +17,41 @@ const apiTemplate = `
 import {resolve} from 'url';
 import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
 
+export interface Map<K extends string, V> {
+    [index: string]: V
+}
+
 {{range .Models -}}
 {{if not .Primitive -}}
-{{if not .Map -}}
+{{if .Map -}}
+interface {{.Map.Name}}JSON {
+    [index: string]: {{.Map.ValueField.JSONType}}
+}
+
+{{else -}}
 export interface {{.Name}} {
-    {{range .Fields -}}
+{{- range .Fields}}
     {{.Name}}{{if not .IsRepeated}}?{{end}}: {{if .MapType}}{{.MapType}}{{else}}{{.Type}}{{end}};
-    {{end}}
+{{- end}}
+}
+
+interface {{.Name}}JSON {
+{{- range .Fields}}
+    {{.JSONName}}{{if not .IsRepeated}}?{{end}}: {{.JSONType}};
+{{- end}}
 }
 
 {{end -}}
-{{$map := .Map -}}
-interface {{.Name}}JSON {
-    {{range .Fields -}}
-    {{.JSONName}}{{if and (not .IsRepeated) (not $map)}}?{{end}}: {{.JSONType}};
-    {{end}}
-}
 
 {{if .CanMarshal -}}
 {{if .Map -}}
-const {{.Map.Name}}MapToJSON = (map: Map<{{.Map.KeyField.Type}}, {{.Map.ValueField.Type}}>): {{.Name}}JSON[] => {
-	return Array.from(map.entries()).map(entry => {
-        const [key, value] = entry
-        const m = {key: key, value: value}
-		return {
-			{{range .Fields -}}
-            {{.JSONName}}: {{stringify .}},
-            {{end}}
-        }
+const {{.Map.Name}}MapToJSON = (map: Map<string, {{.Map.ValueField.Type}}>): {{.Map.Name}}JSON => {
+    const obj:{{.Map.Name}}JSON = {}
+    Object.keys(map).forEach(key => {
+        const m = {value: map[key]}
+        obj[key] = {{stringify .Map.ValueField}}
     })
+    return obj
 }
 
 {{else -}}
@@ -53,7 +59,7 @@ const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}): {{.Name}}
     return {
         {{range .Fields -}}
         {{.JSONName}}: m !== undefined ? {{stringify .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
-        {{end}}
+{{end -}}
     };
 };
 
@@ -62,19 +68,21 @@ const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}): {{.Name}}
 
 {{if .CanUnmarshal -}}
 {{if .Map -}}
-const JSONTo{{.Map.Name}}Map = (entries: {{.Name}}JSON[]): Map<{{.Map.KeyField.Type}}, {{.Map.ValueField.Type}}> => {
-	return new Map(entries.map(m => {
-		const tuple: [{{.Map.KeyField.Type}}, {{.Map.ValueField.Type}}] = [{{parse .Map.KeyField}}, {{parse .Map.ValueField}}]
-		return tuple
-	}))
+const JSONTo{{.Map.Name}}Map = (entries: {{.Map.Name}}JSON): Map<string, {{.Map.ValueField.Type}}> => {
+    const obj:Map<string, {{.Map.ValueField.Type}}> = {}
+    Object.keys(entries).forEach(key => {
+        const m = {value: entries[key]}
+        obj[key] = {{parse .Map.ValueField}}
+    })
+    return obj
 }
 
 {{else -}}
 const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}JSON): {{.Name}} => {
     return {
-        {{range .Fields -}}
-        {{.Name}}: m !== undefined ? {{parse .}} : {{if .MapType}}new Map(){{else if .IsRepeated}}[]{{else}}undefined{{end}},
-        {{end}}
+{{- range .Fields}}
+        {{.Name}}: m !== undefined ? {{parse .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
+{{- end}}
     };
 };
 
@@ -85,9 +93,9 @@ const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}JSON): {{.Na
 
 {{range .Services -}}
 export interface {{.Name}} {
-	{{range .Methods -}}
+{{range .Methods -}}
     {{.Name}}: ({{.InputArg}}: {{.InputType}}) => Promise<{{.OutputType}}>;
-    {{end}}
+{{end -}}
 }
 
 export class {{.Name}}Client implements {{.Name}} {
@@ -372,6 +380,11 @@ func newField(f *descriptor.FieldDescriptorProto, m *descriptor.DescriptorProto,
 	field.IsRepeated = isRepeated(f)
 	field.MapType = mapType(f, m, pkg)
 
+	if field.MapType != nil {
+		field.Type = strings.TrimSuffix(field.Type, "[]")
+		field.JSONType = strings.TrimSuffix(field.JSONType, "EntryJSON[]") + "JSON"
+	}
+
 	return field
 }
 
@@ -440,16 +453,13 @@ func mapType(f *descriptor.FieldDescriptorProto, m *descriptor.DescriptorProto, 
 	simpleName := splits[len(splits)-1]
 	for _, n := range m.GetNestedType() {
 		if n.GetName() == simpleName && n.GetOptions().GetMapEntry() {
-			var keyType, valType string
+			var valType string
 			for _, e := range n.GetField() {
-				if e.GetName() == "key" {
-					keyType, _ = types(e, pkg)
-				}
 				if e.GetName() == "value" {
 					valType, _ = types(e, pkg)
 				}
 			}
-			s := "Map<" + keyType + "," + valType + ">"
+			s := "Map<string," + valType + ">"
 			return &s
 		}
 	}
@@ -479,7 +489,7 @@ func stringify(f ModelField) string {
 		if f.Type == "Date" {
 			return fmt.Sprintf("m.%s.map((n) => n.toISOString())", f.Name)
 		} else if f.MapType != nil {
-			return fmt.Sprintf("%sMapToJSON(m.%s)", strings.TrimSuffix(f.Type, "Entry[]"), f.Name)
+			return fmt.Sprintf("%sMapToJSON(m.%s)", strings.TrimSuffix(f.Type, "Entry"), f.Name)
 		} else if f.IsMessage {
 			return fmt.Sprintf("m.%s.map(%sToJSON)", f.Name, strings.TrimSuffix(f.Type, "[]"))
 		}
@@ -501,7 +511,7 @@ func parse(f ModelField) string {
 		if f.Type == "Date" {
 			return fmt.Sprintf("m.%s.map((n) => new Date(n))", f.JSONName)
 		} else if f.MapType != nil {
-			return fmt.Sprintf("JSONTo%sMap(m.%s)", strings.TrimSuffix(f.Type, "Entry[]"), f.JSONName)
+			return fmt.Sprintf("JSONTo%sMap(m.%s)", strings.TrimSuffix(f.Type, "Entry"), f.JSONName)
 		} else if f.IsMessage {
 			return fmt.Sprintf("m.%s.map(JSONTo%s)", f.JSONName, strings.TrimSuffix(f.Type, "[]"))
 		}
