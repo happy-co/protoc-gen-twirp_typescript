@@ -57,9 +57,9 @@ const {{.Map.Name}}MapToJSON = (map: Dictionary<{{.Map.ValueField.Type}}>): {{.M
 {{else -}}
 const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}): {{.Name}}JSON => {
     return {
-        {{range .Fields -}}
-        {{.JSONName}}: m !== undefined ? {{stringify .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
-{{end -}}
+{{- range .Fields}}
+        {{.JSONName}}: type of m === 'object' && m.hasOwnProperty('{{.Name}}') ? {{stringify .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
+{{- end}}
     };
 };
 
@@ -81,7 +81,7 @@ const JSONTo{{.Map.Name}}Map = (entries: {{.Map.Name}}JSON): Dictionary<{{.Map.V
 const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}JSON): {{.Name}} => {
     return {
 {{- range .Fields}}
-        {{.Name}}: m !== undefined ? {{parse .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
+        {{.Name}}: type of m === 'object' && m.hasOwnProperty('{{.Name}}') ? {{parse .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
 {{- end}}
     };
 };
