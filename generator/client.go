@@ -17,7 +17,7 @@ const apiTemplate = `
 import {resolve} from 'url';
 import {createTwirpRequest, throwTwirpError, Fetch} from './twirp';
 
-export interface Map<K extends string, V> {
+export interface Dictionary<V> {
     [index: string]: V
 }
 
@@ -45,7 +45,7 @@ interface {{.Name}}JSON {
 
 {{if .CanMarshal -}}
 {{if .Map -}}
-const {{.Map.Name}}MapToJSON = (map: Map<string, {{.Map.ValueField.Type}}>): {{.Map.Name}}JSON => {
+const {{.Map.Name}}MapToJSON = (map: Dictionary<{{.Map.ValueField.Type}}>): {{.Map.Name}}JSON => {
     const obj:{{.Map.Name}}JSON = {}
     Object.keys(map).forEach(key => {
         const m = {value: map[key]}
@@ -68,8 +68,8 @@ const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}): {{.Name}}
 
 {{if .CanUnmarshal -}}
 {{if .Map -}}
-const JSONTo{{.Map.Name}}Map = (entries: {{.Map.Name}}JSON): Map<string, {{.Map.ValueField.Type}}> => {
-    const obj:Map<string, {{.Map.ValueField.Type}}> = {}
+const JSONTo{{.Map.Name}}Map = (entries: {{.Map.Name}}JSON): Dictionary<{{.Map.ValueField.Type}}> => {
+    const obj:Dictionary<{{.Map.ValueField.Type}}> = {}
     Object.keys(entries).forEach(key => {
         const m = {value: entries[key]}
         obj[key] = {{parse .Map.ValueField}}
@@ -459,7 +459,7 @@ func mapType(f *descriptor.FieldDescriptorProto, m *descriptor.DescriptorProto, 
 					valType, _ = types(e, pkg)
 				}
 			}
-			s := "Map<string," + valType + ">"
+			s := "Dictionary<" + valType + ">"
 			return &s
 		}
 	}
