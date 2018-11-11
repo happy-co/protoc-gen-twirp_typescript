@@ -99,19 +99,19 @@ export interface {{.Name}} {
 }
 
 export class {{.Name}}Client implements {{.Name}} {
-    private hostname: string;
-    private fetch: Fetch;
-    private pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
+    private _hostname: string;
+    private _fetch: Fetch;
+    private _pathPrefix = "/twirp/{{.Package}}.{{.Name}}/";
 
     constructor(hostname: string, fetch: Fetch) {
-        this.hostname = hostname;
-        this.fetch = fetch;
+        this._hostname = hostname;
+        this._fetch = fetch;
     }
 
     {{range .Methods -}}
     {{.Name}}({{.InputArg}}: {{.InputType}}): Promise<{{.OutputType}}> {
-        const url = resolve(this.hostname, this.pathPrefix + "{{.Path}}");
-        return this.fetch(createTwirpRequest(url, {{.InputType}}ToJSON({{.InputArg}}))).then((resp) => {
+        const url = resolve(this._hostname, this._pathPrefix + "{{.Path}}");
+        return this._fetch(createTwirpRequest(url, {{.InputType}}ToJSON({{.InputArg}}))).then((resp) => {
             if (!resp.ok) {
                 return throwTwirpError(resp);
             }
