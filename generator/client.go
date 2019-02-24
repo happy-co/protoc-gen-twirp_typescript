@@ -58,7 +58,7 @@ const {{.Map.Name}}MapToJSON = (map: Dictionary<{{.Map.ValueField.Type}}>): {{.M
 const {{.Name}}ToJSON = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}): {{.Name}}JSON => {
     return {
 {{- range .Fields}}
-        {{.JSONName}}: (!!m && m.hasOwnProperty('{{.Name}}')) ? {{stringify .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
+        {{.JSONName}}: (!!m && m.hasOwnProperty('{{.Name}}')) && m.{{.Name}} !== undefined ? {{stringify .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
 {{- end}}
     };
 };
@@ -81,7 +81,7 @@ const JSONTo{{.Map.Name}}Map = (entries: {{.Map.Name}}JSON): Dictionary<{{.Map.V
 const JSONTo{{.Name}} = ({{if .Fields}}m{{else}}_{{end}}?: {{.Name}}JSON): {{.Name}} => {
     return {
 {{- range .Fields}}
-        {{.Name}}: (!!m && m.hasOwnProperty('{{.JSONName}}')) ? {{parse .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
+        {{.Name}}: (!!m && m.hasOwnProperty('{{.JSONName}}')) && m.{{.JSONName}} !== undefined && m.{{.JSONName}} !== null ? {{parse .}} : {{if .MapType}}{}{{else if .IsRepeated}}[]{{else}}undefined{{end}},
 {{- end}}
     };
 };
@@ -496,7 +496,7 @@ func stringify(f ModelField) string {
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("m.%[1]s !== undefined ? m.%[1]s.toISOString() : undefined", f.Name)
+		return fmt.Sprintf("m.%[1]s.toISOString()", f.Name)
 	}
 
 	if f.IsMessage {
@@ -518,7 +518,7 @@ func parse(f ModelField) string {
 	}
 
 	if f.Type == "Date" {
-		return fmt.Sprintf("m.%[1]s !== undefined ? new Date(m.%[1]s) : undefined", f.JSONName)
+		return fmt.Sprintf("new Date(m.%[1]s)", f.JSONName)
 	}
 
 	if f.IsMessage {
