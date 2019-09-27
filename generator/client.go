@@ -213,6 +213,10 @@ func (ctx *APIContext) ApplyMarshalFlags() {
 }
 
 func (ctx *APIContext) enableMarshal(m *Model) {
+	if m.CanMarshal {
+		return
+	}
+
 	m.CanMarshal = true
 
 	for _, f := range m.Fields {
@@ -235,6 +239,10 @@ func (ctx *APIContext) enableMarshal(m *Model) {
 }
 
 func (ctx *APIContext) enableUnmarshal(m *Model) {
+	if m.CanUnmarshal {
+		return
+	}
+
 	m.CanUnmarshal = true
 
 	for _, f := range m.Fields {
