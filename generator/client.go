@@ -22,8 +22,9 @@ export interface Dictionary<V> {
 }
 
 {{range .Enums -}}
-export type {{.Name}} = {{range $index, $value := .Values}}{{if gt $index 0}} | {{end}}"{{$value}}"{{end}}
-{{- end}}
+export type {{.Name}} = {{range $index, $value := .Values}}{{if gt $index 0}} | {{end}}"{{$value}}"{{end}};
+
+{{end -}}
 
 {{range .Models -}}
 {{if not .Primitive -}}
@@ -285,7 +286,7 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 
 	// Parse all Enums for generating typescript interfaces
 	for _, e := range d.GetEnumType() {
-		addEnumType(e, pkg, &ctx)
+		addEnumType(e, "", pkg, &ctx)
 	}
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
@@ -385,11 +386,15 @@ func addMessageType(m *descriptor.DescriptorProto, prefix, pkg string, ctx *APIC
 	for _, n := range m.GetNestedType() {
 		addMessageType(n, prefix+"."+m.GetName(), pkg, ctx)
 	}
+
+	for _, e := range m.GetEnumType() {
+		addEnumType(e, prefix+"."+m.GetName(), pkg, ctx)
+	}
 }
 
-func addEnumType(e *descriptor.EnumDescriptorProto, pkg string, ctx *APIContext) {
+func addEnumType(e *descriptor.EnumDescriptorProto, prefix, pkg string, ctx *APIContext) {
 	enum := &Enum{
-		Name: e.GetName(),
+		Name: strings.Replace(prefix, ".", "", -1) + e.GetName(),
 	}
 	for _, v := range e.GetValue() {
 		enum.Values = append(enum.Values, v.GetName())
