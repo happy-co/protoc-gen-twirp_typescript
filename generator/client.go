@@ -21,6 +21,10 @@ export interface Dictionary<V> {
     [index: string]: V
 }
 
+{{range .Enums -}}
+export type {{.Name}} = {{range $index, $value := .Values}}{{if gt $index 0}} | {{end}}"{{$value}}"{{end}}
+{{- end}}
+
 {{range .Models -}}
 {{if not .Primitive -}}
 {{if .Map -}}
@@ -150,6 +154,11 @@ type MapDetails struct {
 	ValueField ModelField
 }
 
+type Enum struct {
+	Name   string
+	Values []string
+}
+
 type Service struct {
 	Name    string
 	Package string
@@ -173,6 +182,7 @@ func NewAPIContext() APIContext {
 
 type APIContext struct {
 	Models      []*Model
+	Enums       []*Enum
 	Services    []*Service
 	modelLookup map[string]*Model
 }
@@ -271,6 +281,11 @@ func CreateClientAPI(outputPath string, d *descriptor.FileDescriptorProto) (*plu
 	// Parse all Messages for generating typescript interfaces
 	for _, m := range d.GetMessageType() {
 		addMessageType(m, "", pkg, &ctx)
+	}
+
+	// Parse all Enums for generating typescript interfaces
+	for _, e := range d.GetEnumType() {
+		addEnumType(e, pkg, &ctx)
 	}
 
 	// Parse all Services for generating typescript method interfaces and default client implementations
@@ -372,6 +387,16 @@ func addMessageType(m *descriptor.DescriptorProto, prefix, pkg string, ctx *APIC
 	}
 }
 
+func addEnumType(e *descriptor.EnumDescriptorProto, pkg string, ctx *APIContext) {
+	enum := &Enum{
+		Name: e.GetName(),
+	}
+	for _, v := range e.GetValue() {
+		enum.Values = append(enum.Values, v.GetName())
+	}
+	ctx.Enums = append(ctx.Enums, enum)
+}
+
 func newField(f *descriptor.FieldDescriptorProto, m *descriptor.DescriptorProto, pkg string) ModelField {
 	tsType, jsonType := protoToTSType(f, pkg)
 	jsonName := f.GetName()
@@ -427,6 +452,9 @@ func types(f *descriptor.FieldDescriptorProto, pkg string) (tsType string, jsonT
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:
 		tsType = "boolean"
 		jsonType = "boolean"
+	case descriptor.FieldDescriptorProto_TYPE_ENUM:
+		tsType = removePkg(f.GetTypeName(), pkg)
+		jsonType = tsType
 	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
 		name := f.GetTypeName()
 
