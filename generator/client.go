@@ -36,13 +36,13 @@ interface {{.Map.Name}}JSON {
 {{else -}}
 export interface {{.Name}} {
 {{- range .Fields}}
-    {{.Name}}{{if not .IsRepeated}}?{{end}}: {{if .MapType}}{{.MapType}}{{else}}{{.Type}}{{end}};
+    {{.Name}}?: {{if .MapType}}{{.MapType}}{{else}}{{.Type}}{{end}};
 {{- end}}
 }
 
 interface {{.Name}}JSON {
 {{- range .Fields}}
-    {{.JSONName}}{{if not .IsRepeated}}?{{end}}: {{.JSONType}};
+    {{.JSONName}}?: {{.JSONType}};
 {{- end}}
 }
 
